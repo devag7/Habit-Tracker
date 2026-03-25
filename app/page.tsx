@@ -140,56 +140,58 @@ function formatStreakText(streak: number, frequency: Frequency): string {
   return `${streak} day${streak === 1 ? "" : "s"} streak`;
 }
 
+function loadHabits(): Habit[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const savedHabits = localStorage.getItem(HABITS_KEY);
+  if (!savedHabits) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(savedHabits) as Habit[];
+  } catch {
+    return [];
+  }
+}
+
+function loadCompletions(): Completions {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const savedCompletions = localStorage.getItem(COMPLETIONS_KEY);
+  if (!savedCompletions) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(savedCompletions) as Completions;
+  } catch {
+    return {};
+  }
+}
+
 export default function Home() {
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [completions, setCompletions] = useState<Completions>({});
+  const [habits, setHabits] = useState<Habit[]>(loadHabits);
+  const [completions, setCompletions] = useState<Completions>(loadCompletions);
   const [name, setName] = useState("");
   const [icon, setIcon] = useState(EMOJIS[0]);
   const [color, setColor] = useState(COLORS[0]);
   const [frequency, setFrequency] = useState<Frequency>("daily");
-  const [isLoaded, setIsLoaded] = useState(false);
 
   const today = useMemo(() => formatDate(new Date()), []);
   const weekDays = useMemo(() => getLastSevenDays(), []);
 
   useEffect(() => {
-    const savedHabits = localStorage.getItem(HABITS_KEY);
-    const savedCompletions = localStorage.getItem(COMPLETIONS_KEY);
-
-    if (savedHabits) {
-      try {
-        setHabits(JSON.parse(savedHabits));
-      } catch {
-        setHabits([]);
-      }
-    }
-
-    if (savedCompletions) {
-      try {
-        setCompletions(JSON.parse(savedCompletions));
-      } catch {
-        setCompletions({});
-      }
-    }
-
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
-
     localStorage.setItem(HABITS_KEY, JSON.stringify(habits));
-  }, [habits, isLoaded]);
+  }, [habits]);
 
   useEffect(() => {
-    if (!isLoaded) {
-      return;
-    }
-
     localStorage.setItem(COMPLETIONS_KEY, JSON.stringify(completions));
-  }, [completions, isLoaded]);
+  }, [completions]);
 
   const completedToday = habits.filter((habit) => {
     const dates = completions[habit.id] ?? [];
