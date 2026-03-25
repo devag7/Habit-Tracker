@@ -11,6 +11,7 @@ import {
   EMOJIS,
   formatDate,
   formatStreakText,
+  buildWeeklyReport,
   getBestEverStreak,
   getCurrentStreak,
   getLastNDays,
@@ -65,54 +66,6 @@ function getHeatmapIntensityClass(count: number): string {
     return "bg-emerald-300";
   }
   return "bg-slate-200";
-}
-
-function buildWeeklyReport(habits: Habit[], completions: Completions): { best: string; worst: string } {
-  if (!habits.length) {
-    return {
-      best: "Add a habit to generate your weekly report.",
-      worst: "Add a habit to generate your weekly report."
-    };
-  }
-
-  const now = new Date();
-  const weekDays = getLastSevenDays();
-
-  const scores = habits.map((habit) => {
-    const dates = completions[habit.id] ?? [];
-
-    if (habit.frequency === "weekly") {
-      const done = isHabitCompletedForDate(habit, dates, now) ? 1 : 0;
-      return {
-        name: habit.name,
-        icon: habit.icon,
-        score: done,
-        total: 1
-      };
-    }
-
-    const doneCount = weekDays.reduce((count, day) => (dates.includes(day) ? count + 1 : count), 0);
-    return {
-      name: habit.name,
-      icon: habit.icon,
-      score: doneCount,
-      total: 7
-    };
-  });
-
-  const withRates = scores.map((entry) => ({
-    ...entry,
-    rate: entry.total ? entry.score / entry.total : 0
-  }));
-
-  const sorted = [...withRates].sort((a, b) => b.rate - a.rate);
-  const best = sorted[0];
-  const worst = sorted[sorted.length - 1];
-
-  const bestText = `${best.icon} ${best.name} is leading this week (${Math.round(best.rate * 100)}%).`;
-  const worstText = `${worst.icon} ${worst.name} needs more attention (${Math.round(worst.rate * 100)}%).`;
-
-  return { best: bestText, worst: worstText };
 }
 
 export default function Home() {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  buildWeeklyReport,
   Completions,
   getBestEverStreak,
   getWeeklyCompletionRates,
@@ -10,34 +11,6 @@ import {
   loadCompletions,
   loadHabits
 } from "../lib/habit-data";
-
-function buildWeeklyReport(habits: Habit[], completions: Completions): { best: string; worst: string } {
-  if (!habits.length) {
-    return {
-      best: "Add a habit to generate your weekly report.",
-      worst: "Add a habit to generate your weekly report."
-    };
-  }
-
-  const scores = habits.map((habit) => {
-    const dates = completions[habit.id] ?? [];
-    const uniqueDates = new Set(dates);
-    return {
-      name: habit.name,
-      icon: habit.icon,
-      rate: uniqueDates.size
-    };
-  });
-
-  const sorted = [...scores].sort((a, b) => b.rate - a.rate);
-  const best = sorted[0];
-  const worst = sorted[sorted.length - 1];
-
-  return {
-    best: `${best.icon} ${best.name} has the strongest recent consistency.`,
-    worst: `${worst.icon} ${worst.name} has the lowest completion momentum.`
-  };
-}
 
 export default function StatsPage() {
   const [habits] = useState<Habit[]>(loadHabits);

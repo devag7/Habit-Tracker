@@ -12,6 +12,7 @@ export type Habit = {
 };
 
 export type Completions = Record<string, string[]>;
+export type WeeklyReport = { best: string; worst: string };
 
 export const EMOJIS = ["💪", "📚", "🏃", "🧘", "💧", "🛌", "🍎", "🧹", "🎯", "✍️"];
 export const COLORS = ["#22c55e", "#3b82f6", "#a855f7", "#f97316", "#e11d48", "#14b8a6"];
@@ -300,4 +301,52 @@ export function getWeeklyCompletionRates(habits: Habit[], completions: Completio
   }
 
   return rates;
+}
+
+export function buildWeeklyReport(habits: Habit[], completions: Completions): WeeklyReport {
+  if (!habits.length) {
+    return {
+      best: "Add a habit to generate your weekly report.",
+      worst: "Add a habit to generate your weekly report."
+    };
+  }
+
+  const now = new Date();
+  const weekDays = getLastSevenDays();
+
+  const scores = habits.map((habit) => {
+    const dates = completions[habit.id] ?? [];
+
+    if (habit.frequency === "weekly") {
+      const done = isHabitCompletedForDate(habit, dates, now) ? 1 : 0;
+      return {
+        name: habit.name,
+        icon: habit.icon,
+        score: done,
+        total: 1
+      };
+    }
+
+    const doneCount = weekDays.reduce((count, day) => (dates.includes(day) ? count + 1 : count), 0);
+    return {
+      name: habit.name,
+      icon: habit.icon,
+      score: doneCount,
+      total: 7
+    };
+  });
+
+  const withRates = scores.map((entry) => ({
+    ...entry,
+    rate: entry.total ? entry.score / entry.total : 0
+  }));
+
+  const sorted = [...withRates].sort((a, b) => b.rate - a.rate);
+  const best = sorted[0];
+  const worst = sorted[sorted.length - 1];
+
+  const bestText = `${best.icon} ${best.name} is leading this week (${Math.round(best.rate * 100)}%).`;
+  const worstText = `${worst.icon} ${worst.name} needs more attention (${Math.round(worst.rate * 100)}%).`;
+
+  return { best: bestText, worst: worstText };
 }
