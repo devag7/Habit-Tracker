@@ -18,6 +18,19 @@ const EMOJIS = ["💪", "📚", "🏃", "🧘", "💧", "🛌", "🍎", "🧹", 
 const COLORS = ["#22c55e", "#3b82f6", "#a855f7", "#f97316", "#e11d48", "#14b8a6"];
 const HABITS_KEY = "habits";
 const COMPLETIONS_KEY = "completions";
+const MAX_HABIT_NAME_LENGTH = 40;
+const WEEKLY_ROW_MIN_WIDTH = 520;
+const ICON_BACKGROUND_ALPHA_HEX = "22";
+const MAX_DAILY_STREAK_CHECKS = 366;
+const MAX_WEEKLY_STREAK_CHECKS = 52;
+
+function createHabitId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `habit-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -36,16 +49,56 @@ function getLastSevenDays(): string[] {
   return days;
 }
 
-function getStreak(dates: string[]): number {
+function getWeekStart(date: Date): Date {
+  const start = new Date(date);
+  const day = start.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  start.setDate(start.getDate() + diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function isDateInWeek(dateString: string, referenceDate: Date): boolean {
+  const date = new Date(`${dateString}T00:00:00`);
+  const weekStart = getWeekStart(referenceDate);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  return date >= weekStart && date < weekEnd;
+}
+
+function hasWeeklyCompletion(dates: string[], referenceDate: Date): boolean {
+  return dates.some((date) => isDateInWeek(date, referenceDate));
+}
+
+function getStreak(dates: string[], frequency: Frequency): number {
   if (!dates.length) {
     return 0;
+  }
+
+  if (frequency === "weekly") {
+    let streak = 0;
+    const now = new Date();
+    const maxWeeklyChecks = Math.max(dates.length + 1, MAX_WEEKLY_STREAK_CHECKS);
+
+    while (streak < maxWeeklyChecks) {
+      const referenceDate = new Date(now);
+      referenceDate.setDate(now.getDate() - streak * 7);
+
+      if (!hasWeeklyCompletion(dates, referenceDate)) {
+        break;
+      }
+
+      streak += 1;
+    }
+
+    return streak;
   }
 
   const dateSet = new Set(dates);
   const today = new Date();
   let streak = 0;
 
-  while (true) {
+  while (streak < MAX_DAILY_STREAK_CHECKS) {
     const current = new Date(today);
     current.setDate(today.getDate() - streak);
 
@@ -77,6 +130,14 @@ function getMotivationalMessage(percent: number): string {
   }
 
   return "Keep it going!";
+}
+
+function formatStreakText(streak: number, frequency: Frequency): string {
+  if (frequency === "weekly") {
+    return `${streak} week${streak === 1 ? "" : "s"} streak`;
+  }
+
+  return `${streak} day${streak === 1 ? "" : "s"} streak`;
 }
 
 export default function Home() {
@@ -130,7 +191,14 @@ export default function Home() {
     localStorage.setItem(COMPLETIONS_KEY, JSON.stringify(completions));
   }, [completions, isLoaded]);
 
-  const completedToday = habits.filter((habit) => (completions[habit.id] ?? []).includes(today)).length;
+  const completedToday = habits.filter((habit) => {
+    const dates = completions[habit.id] ?? [];
+    if (habit.frequency === "weekly") {
+      return hasWeeklyCompletion(dates, new Date());
+    }
+
+    return dates.includes(today);
+  }).length;
   const completionPercent = habits.length ? Math.round((completedToday / habits.length) * 100) : 0;
   const motivation = getMotivationalMessage(completionPercent);
 
@@ -143,7 +211,7 @@ export default function Home() {
     }
 
     const newHabit: Habit = {
-      id: crypto.randomUUID(),
+      id: createHabitId(),
       name: trimmedName,
       icon,
       color,
@@ -159,13 +227,17 @@ export default function Home() {
 
   const toggleToday = (habitId: string) => {
     setCompletions((prev) => {
+      const habit = habits.find((item) => item.id === habitId);
       const habitDates = prev[habitId] ?? [];
-      const hasToday = habitDates.includes(today);
+      const isWeekly = habit?.frequency === "weekly";
+      const hasToday = isWeekly ? hasWeeklyCompletion(habitDates, new Date()) : habitDates.includes(today);
 
       return {
         ...prev,
         [habitId]: hasToday
-          ? habitDates.filter((date) => date !== today)
+          ? (isWeekly
+              ? habitDates.filter((date) => !isDateInWeek(date, new Date()))
+              : habitDates.filter((date) => date !== today))
           : [...habitDates, today].sort()
       };
     });
@@ -202,7 +274,7 @@ export default function Home() {
               onChange={(event) => setName(event.target.value)}
               className="rounded-lg border border-slate-300 px-3 py-2 outline-none ring-emerald-300 focus:ring"
               placeholder="Drink water"
-              maxLength={40}
+              maxLength={MAX_HABIT_NAME_LENGTH}
               required
             />
           </label>
@@ -276,8 +348,8 @@ export default function Home() {
           <div className="mt-4 grid gap-3">
             {habits.map((habit) => {
               const dates = completions[habit.id] ?? [];
-              const doneToday = dates.includes(today);
-              const streak = getStreak(dates);
+              const doneToday = habit.frequency === "weekly" ? hasWeeklyCompletion(dates, new Date()) : dates.includes(today);
+              const streak = getStreak(dates, habit.frequency);
 
               return (
                 <article
@@ -287,14 +359,14 @@ export default function Home() {
                   <div className="flex items-center gap-4">
                     <div
                       className="flex h-14 w-14 items-center justify-center rounded-xl text-3xl"
-                      style={{ backgroundColor: `${habit.color}22` }}
+                      style={{ backgroundColor: `${habit.color}${ICON_BACKGROUND_ALPHA_HEX}` }}
                     >
                       {habit.icon}
                     </div>
                     <div>
                       <p className="font-semibold text-slate-900">{habit.name}</p>
                       <p className="text-sm text-slate-500">
-                        {habit.frequency} · {streak} day streak
+                        {habit.frequency} · {formatStreakText(streak, habit.frequency)}
                       </p>
                     </div>
                   </div>
@@ -326,7 +398,11 @@ export default function Home() {
               const doneDates = new Set(completions[habit.id] ?? []);
 
               return (
-                <div key={habit.id} className="flex min-w-[520px] items-center gap-4 rounded-xl border border-slate-200 p-3">
+                <div
+                  key={habit.id}
+                  className="flex items-center gap-4 rounded-xl border border-slate-200 p-3"
+                  style={{ minWidth: WEEKLY_ROW_MIN_WIDTH }}
+                >
                   <div className="w-44 truncate font-medium text-slate-900">
                     <span className="mr-2 text-2xl">{habit.icon}</span>
                     {habit.name}
